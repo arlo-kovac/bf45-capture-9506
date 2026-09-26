@@ -1,0 +1,47 @@
+name: verify-pages-api
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - run: mkdir -p _site && echo '<html><body>test</body></html>' > _site/index.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+      - name: manual-api-test
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # If we get here, the standard deploy worked
+          echo "Standard deploy succeeded"
+          
+          # Now test the raw API with the artifact we just uploaded
+          TOKEN=$(curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+                       "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value)
+          echo "::add-mask::$TOKEN"
+          
+          API="https://api.github.com/repos/$GITHUB_REPOSITORY/pages/deployments"
+          
+          # Get our artifact ID
+          ART_ID=$(curl -s -H "Authorization: token $GH_TOKEN" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" | \
+            jq -r '.artifacts[0].id')
+          echo "Artifact ID: $ART_ID"
+          
+          # Try the raw API with this artifact and a bogus URL
+          echo "===== RAW API TEST with live artifact + bogus URL ====="
+          curl -s -w '\nHTTP=%{http_code}\n' -X POST \
+            -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" "$API" \
+            -d "{\"artifact_id\":$ART_ID,\"artifact_url\":\"https://httpbin.org/get?arm=test\",\"pages_build_version\":\"${GITHUB_SHA}-v2\",\"oidc_token\":\"$TOKEN\",\"environment\":\"github-pages\"}"
