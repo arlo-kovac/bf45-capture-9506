@@ -7,10 +7,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: { name: github-pages }
     steps:
-      - run: mkdir -p _site && echo '<html>test</html>' > _site/index.html
+      - run: mkdir -p _site && echo '<html>ctrl</html>' > _site/index.html
       - uses: actions/upload-pages-artifact@v3
         with: { path: _site }
-      - name: test-payload-variants
+      - name: controls
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -20,33 +20,25 @@ jobs:
           ART=$(curl -s -H "Authorization: token $GH_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" | jq -r '.artifacts[0].id')
           echo "ART=$ART"
           
-          echo "===== T1: minimal (no artifact_url, no environment) ====="
+          echo "===== BASELINE: minimal (expect 200) ====="
           curl -s -w '\nHTTP=%{http_code}\n' -X POST "$API" \
-            -H "Authorization: token $GH_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            -H "Content-Type: application/json; charset=utf-8" \
-            -H "User-Agent: octokit-core.js/5.0.0 Node.js/20.0.0" \
+            -H "Authorization: token $GH_TOKEN" -H "Accept: application/vnd.github.v3+json" \
+            -H "Content-Type: application/json; charset=utf-8" -H "User-Agent: octokit-core.js/5.0.0 Node.js/20.0.0" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             -d "{\"artifact_id\":$ART,\"pages_build_version\":\"$GITHUB_SHA\",\"oidc_token\":\"$OIDC\"}"
-          
           sleep 3
-          
-          echo "===== T2: with artifact_url added ====="
+
+          echo "===== CTRL-A: artifact_url with INVALID value ====="
           curl -s -w '\nHTTP=%{http_code}\n' -X POST "$API" \
-            -H "Authorization: token $GH_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            -H "Content-Type: application/json; charset=utf-8" \
-            -H "User-Agent: octokit-core.js/5.0.0 Node.js/20.0.0" \
+            -H "Authorization: token $GH_TOKEN" -H "Accept: application/vnd.github.v3+json" \
+            -H "Content-Type: application/json; charset=utf-8" -H "User-Agent: octokit-core.js/5.0.0 Node.js/20.0.0" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            -d "{\"artifact_id\":$ART,\"artifact_url\":\"https://httpbin.org/get\",\"pages_build_version\":\"${GITHUB_SHA}-t2\",\"oidc_token\":\"$OIDC\"}"
-          
+            -d "{\"artifact_id\":$ART,\"artifact_url\":\"not-a-url\",\"pages_build_version\":\"${GITHUB_SHA}-ca\",\"oidc_token\":\"$OIDC\"}"
           sleep 3
-          
-          echo "===== T3: with environment field ====="
+
+          echo "===== CTRL-B: GARBAGE unknown field instead of artifact_url ====="
           curl -s -w '\nHTTP=%{http_code}\n' -X POST "$API" \
-            -H "Authorization: token $GH_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            -H "Content-Type: application/json; charset=utf-8" \
-            -H "User-Agent: octokit-core.js/5.0.0 Node.js/20.0.0" \
+            -H "Authorization: token $GH_TOKEN" -H "Accept: application/vnd.github.v3+json" \
+            -H "Content-Type: application/json; charset=utf-8" -H "User-Agent: octokit-core.js/5.0.0 Node.js/20.0.0" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            -d "{\"artifact_id\":$ART,\"artifact_url\":\"https://httpbin.org/get\",\"pages_build_version\":\"${GITHUB_SHA}-t3\",\"oidc_token\":\"$OIDC\",\"environment\":\"github-pages\"}"
+            -d "{\"artifact_id\":$ART,\"zzq_nonsense\":1,\"pages_build_version\":\"${GITHUB_SHA}-cb\",\"oidc_token\":\"$OIDC\"}"
